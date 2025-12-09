@@ -31,6 +31,13 @@ var animation_state = "idle"  # idle, run, jump
 
 # Base constants
 const GRAVITY = 980.0
+const ABILITY_COOLDOWN = 0.5  # Cooldown between ability uses
+var ability_timer = 0.0
+
+# Ability projectiles
+const WATER_PROJECTILE = preload("res://water_projectile.tscn")
+const WIND_PROJECTILE = preload("res://wind_projectile.tscn")
+const FIRE_PROJECTILE = preload("res://fire_projectile.tscn")
 
 @onready var animated_sprite = $AnimatedSprite2D
 
@@ -43,6 +50,8 @@ func _input(event):
 	if event is InputEventKey and event.pressed:
 		if event.keycode == KEY_X:
 			_switch_character()
+		elif event.keycode == KEY_F:
+			_use_ability()
 
 func _switch_character():
 	# Cycle to next character
@@ -85,6 +94,10 @@ func _update_animation():
 			animated_sprite.play(animation_state)
 
 func _physics_process(delta):
+	# Update ability cooldown timer
+	if ability_timer > 0:
+		ability_timer -= delta
+	
 	# Apply gravity when not on floor
 	if not is_on_floor():
 		velocity.y += GRAVITY * delta
@@ -112,3 +125,38 @@ func _physics_process(delta):
 	
 	# Move the character
 	move_and_slide()
+
+func _use_ability():
+	# Check cooldown
+	if ability_timer > 0:
+		return
+	
+	# Reset cooldown
+	ability_timer = ABILITY_COOLDOWN
+	
+	# Determine direction based on sprite flip
+	var facing_direction = Vector2.RIGHT
+	if animated_sprite and animated_sprite.flip_h:
+		facing_direction = Vector2.LEFT
+	
+	# Spawn appropriate projectile based on character
+	var projectile_scene = null
+	match current_character.element:
+		"Water":
+			projectile_scene = WATER_PROJECTILE
+		"Wind":
+			projectile_scene = WIND_PROJECTILE
+		"Fire":
+			projectile_scene = FIRE_PROJECTILE
+	
+	if projectile_scene:
+		var projectile = projectile_scene.instantiate()
+		# Position projectile in front of player
+		var spawn_offset = Vector2(20, 0) if facing_direction.x > 0 else Vector2(-20, 0)
+		projectile.position = global_position + spawn_offset
+		projectile.direction = facing_direction
+		
+		# Add to scene tree (parent is the level)
+		get_tree().current_scene.add_child(projectile)
+		
+		print("Used ", current_character.element, " ability!")

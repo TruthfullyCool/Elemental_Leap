@@ -2,6 +2,7 @@ extends Node2D
 
 @onready var win_area = $WinArea
 @onready var win_label = $WinLabel
+const GOAL_DOOR = preload("res://goal_door.tscn")
 
 func _ready():
 	# Connect win signal
@@ -15,6 +16,7 @@ func _ready():
 	# Setup terrain visuals and trees
 	_setup_terrain()
 	_place_trees()
+	_setup_goal()
 
 func _setup_terrain():
 	# Replace ColorRect visuals with terrain tileset
@@ -87,6 +89,23 @@ func _place_trees():
 		# Place trees with increased spacing for fewer trees, avoiding spawn area
 		TerrainHelper.place_random_trees(self, ground_start, ground_end, ground.position.y, 300.0, 600.0, player_spawn_x)
 		TerrainHelper.place_random_bushes(self, ground_start, ground_end, ground.position.y, 100.0, 250.0)
+
+func _setup_goal():
+	# Place goal door on the final platform
+	var final_platform = get_node_or_null("FinalPlatform")
+	if final_platform and GOAL_DOOR:
+		# Create goal door
+		var goal_door = GOAL_DOOR.instantiate()
+		# Position door on top of the final platform, centered
+		goal_door.position = Vector2(final_platform.position.x, final_platform.position.y - 45)
+		add_child(goal_door)
+		
+		# Connect goal door signal
+		goal_door.player_reached_goal.connect(_on_player_won)
+		
+		# Hide or disable the old win area since door handles it now
+		if win_area:
+			win_area.queue_free()
 
 func _on_player_won():
 	# Disable player movement
