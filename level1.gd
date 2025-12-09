@@ -2,110 +2,128 @@ extends Node2D
 
 @onready var win_area = $WinArea
 @onready var win_label = $WinLabel
-const GOAL_DOOR = preload("res://goal_door.tscn")
 
 func _ready():
-	# Connect win signal
-	if win_area:
+	# Connect win signal - check if it's a GoalDoor or WinArea
+	var goal_door = get_node_or_null("FinalPlatform/GoalDoor")
+	if goal_door:
+		goal_door.player_won.connect(_on_player_won)
+	elif win_area:
 		win_area.player_won.connect(_on_player_won)
 	
 	# Hide win label initially
 	if win_label:
 		win_label.visible = false
 	
-	# Setup terrain visuals and trees
+	# Setup terrain and decorations
 	_setup_terrain()
 	_place_trees()
-	_setup_goal()
 
 func _setup_terrain():
-	# Replace ColorRect visuals with terrain tileset
-	var terrain_texture = TerrainHelper.create_terrain_texture()
-	if not terrain_texture:
-		return
+	# Get player spawn position for safe zone
+	var player = get_node_or_null("Player")
+	var player_spawn_x = -1.0
+	if player:
+		player_spawn_x = player.position.x
 	
-	# Update ground visual
+	# Setup ground
 	var ground = get_node_or_null("Ground")
 	if ground:
-		var color_rect = ground.get_node_or_null("ColorRect")
-		if color_rect:
-			# Calculate ground width from ColorRect offsets
-			var ground_width = color_rect.offset_right - color_rect.offset_left
-			var ground_start = ground.position.x + color_rect.offset_left
-			var ground_end = ground.position.x + color_rect.offset_right
-			color_rect.queue_free()
-			
-			# Create tiled ground sprite
-			TerrainHelper.create_ground_sprite(ground, ground_start, ground_end, ground.position.y, 32)
+		# Remove ColorRect children immediately
+		var to_remove = []
+		for child in ground.get_children():
+			if child.name == "ColorRect":
+				to_remove.append(child)
+		for rect in to_remove:
+			ground.remove_child(rect)
+			rect.queue_free()
+		
+		# Create tiled ground
+		var ground_collision = ground.get_node_or_null("CollisionShape2D")
+		if ground_collision:
+			var shape = ground_collision.shape
+			if shape:
+				var start_x = ground.position.x - shape.size.x / 2.0
+				var end_x = ground.position.x + shape.size.x / 2.0
+				var y = ground.position.y
+				print("Setting up ground: position=", ground.position, " size=", shape.size, " start_x=", start_x, " end_x=", end_x)
+				TerrainHelper.create_ground_sprite(ground, start_x, end_x, y)
+				print("Ground setup complete")
 	
-	# Update platform visuals - check for platforms 1-9
+	# Setup platforms
 	for i in range(1, 10):
 		var platform = get_node_or_null("Platform" + str(i))
 		if platform:
-			var color_rect = platform.get_node_or_null("ColorRect")
-			if color_rect:
-				# Calculate platform width from ColorRect offsets
-				var platform_width = color_rect.offset_right - color_rect.offset_left
-				var platform_x = platform.position.x + color_rect.offset_left
-				color_rect.queue_free()
-				
-				# Create tiled platform sprite
-				TerrainHelper.create_platform_sprite(platform, platform_x, platform.position.y, platform_width)
+			# Remove ColorRect immediately
+			var to_remove = []
+			for child in platform.get_children():
+				if child.name == "ColorRect":
+					to_remove.append(child)
+			for rect in to_remove:
+				platform.remove_child(rect)
+				rect.queue_free()
+			
+			# Create tiled platform
+			var collision = platform.get_node_or_null("CollisionShape2D")
+			if collision:
+				var shape = collision.shape
+				if shape:
+					var x = platform.position.x - shape.size.x / 2.0
+					var width = shape.size.x
+					var y = platform.position.y
+					TerrainHelper.create_platform_sprite(platform, x, y, width)
 	
-	# Update final platform
+	# Setup final platform
 	var final_platform = get_node_or_null("FinalPlatform")
 	if final_platform:
-		var color_rect = final_platform.get_node_or_null("ColorRect")
-		if color_rect:
-			var platform_width = color_rect.offset_right - color_rect.offset_left
-			var platform_x = final_platform.position.x + color_rect.offset_left
-			color_rect.queue_free()
-			
-			TerrainHelper.create_platform_sprite(final_platform, platform_x, final_platform.position.y, platform_width)
+		# Remove ColorRect immediately (but keep GoalDoor)
+		var to_remove = []
+		for child in final_platform.get_children():
+			if child.name == "ColorRect":
+				to_remove.append(child)
+		for rect in to_remove:
+			final_platform.remove_child(rect)
+			rect.queue_free()
+		
+		# Create tiled final platform
+		var collision = final_platform.get_node_or_null("CollisionShape2D")
+		if collision:
+			var shape = collision.shape
+			if shape:
+				var x = final_platform.position.x - shape.size.x / 2.0
+				var width = shape.size.x
+				var y = final_platform.position.y
+				TerrainHelper.create_platform_sprite(final_platform, x, y, width)
 
 func _place_trees():
-	# Place trees randomly along the ground
+	# Get ground bounds
 	var ground = get_node_or_null("Ground")
-	if ground:
-		var color_rect = ground.get_node_or_null("ColorRect")
-		var ground_start = ground.position.x
-		var ground_end = ground.position.x
-		
-		# Calculate ground bounds from ColorRect if it still exists, otherwise use position
-		if color_rect:
-			ground_start = ground.position.x + color_rect.offset_left
-			ground_end = ground.position.x + color_rect.offset_right
-		else:
-			# Fallback: estimate from ground position (for level 1: 1750 width)
-			ground_start = ground.position.x - 2000
-			ground_end = ground.position.x + 2000
-		
-		# Get player spawn position to avoid placing trees near it
-		var player = get_node_or_null("Player")
-		var player_spawn_x = 100.0  # Default spawn position
-		if player:
-			player_spawn_x = player.position.x
-		
-		# Place trees with increased spacing for fewer trees, avoiding spawn area
-		TerrainHelper.place_random_trees(self, ground_start, ground_end, ground.position.y, 300.0, 600.0, player_spawn_x)
-		TerrainHelper.place_random_bushes(self, ground_start, ground_end, ground.position.y, 100.0, 250.0)
-
-func _setup_goal():
-	# Place goal door on the final platform
-	var final_platform = get_node_or_null("FinalPlatform")
-	if final_platform and GOAL_DOOR:
-		# Create goal door
-		var goal_door = GOAL_DOOR.instantiate()
-		# Position door on top of the final platform, centered
-		goal_door.position = Vector2(final_platform.position.x, final_platform.position.y - 45)
-		add_child(goal_door)
-		
-		# Connect goal door signal
-		goal_door.player_reached_goal.connect(_on_player_won)
-		
-		# Hide or disable the old win area since door handles it now
-		if win_area:
-			win_area.queue_free()
+	if not ground:
+		return
+	
+	var ground_collision = ground.get_node_or_null("CollisionShape2D")
+	if not ground_collision:
+		return
+	
+	var shape = ground_collision.shape
+	if not shape:
+		return
+	
+	# Get player spawn position
+	var player = get_node_or_null("Player")
+	var player_spawn_x = -1.0
+	if player:
+		player_spawn_x = player.position.x
+	
+	var start_x = ground.position.x - shape.size.x / 2.0
+	var end_x = ground.position.x + shape.size.x / 2.0
+	var ground_y = ground.position.y
+	
+	# Place trees
+	TerrainHelper.place_random_trees(self, start_x, end_x, ground_y, 300.0, 600.0, player_spawn_x)
+	
+	# Place bushes
+	TerrainHelper.place_random_bushes(self, start_x, end_x, ground_y)
 
 func _on_player_won():
 	# Disable player movement
@@ -143,4 +161,3 @@ func _input(event):
 	if event.is_action_pressed("ui_select") or (event is InputEventKey and event.keycode == KEY_R):
 		if win_label and win_label.visible:
 			LevelManager.load_level(1)  # Restart from level 1
-

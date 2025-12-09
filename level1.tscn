@@ -1,9 +1,10 @@
-[gd_scene load_steps=8 format=3 uid="uid://cj0j1v2ecnm75"]
+[gd_scene load_steps=9 format=3 uid="uid://cj0j1v2ecnm75"]
 
 [ext_resource type="PackedScene" uid="uid://bq8x7k3m2n4p5" path="res://player.tscn" id="1_1"]
 [ext_resource type="Script" path="res://camera_follow.gd" id="1_2"]
 [ext_resource type="Script" path="res://win_area.gd" id="1_3"]
 [ext_resource type="Script" path="res://level1.gd" id="1_4"]
+[ext_resource type="PackedScene" uid="uid://co34ujxch5mx5" path="res://goal_door.tscn" id="1_5"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_ground"]
 size = Vector2(3500, 32)
@@ -170,6 +171,9 @@ offset_right = 100.0
 offset_bottom = 16.0
 color = Color(0.8, 0.8, 0.2, 1)
 
+[node name="GoalDoor" parent="FinalPlatform" instance=ExtResource("1_5")]
+position = Vector2(0, -48)
+
 [node name="Player" parent="." instance=ExtResource("1_1")]
 position = Vector2(100, 550)
 
@@ -200,4 +204,3 @@ grow_vertical = 2
 text = "You Win!"
 horizontal_alignment = 1
 vertical_alignment = 1
-

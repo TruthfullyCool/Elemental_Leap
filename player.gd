@@ -1,6 +1,6 @@
 extends CharacterBody2D
 
-# Character data - Elemental characters
+# Character data with element types
 var characters = [
 	{
 		"name": "Water",
@@ -13,33 +13,29 @@ var characters = [
 		"name": "Wind",
 		"element": "Wind",
 		"create_frames": CharacterSprites.create_wind_spriteframes,
-		"speed": 350.0,  # Faster
-		"jump": -450.0   # Lower jump
+		"speed": 350.0,
+		"jump": -450.0
 	},
 	{
 		"name": "Fire",
 		"element": "Fire",
 		"create_frames": CharacterSprites.create_fire_spriteframes,
-		"speed": 250.0,  # Slower
-		"jump": -550.0   # Higher jump
+		"speed": 250.0,
+		"jump": -550.0
 	}
 ]
 
 var current_character_index = 0
 var current_character = characters[0]
-var animation_state = "idle"  # idle, run, jump
 
 # Base constants
 const GRAVITY = 980.0
-const ABILITY_COOLDOWN = 0.5  # Cooldown between ability uses
-var ability_timer = 0.0
-
-# Ability projectiles
-const WATER_PROJECTILE = preload("res://water_projectile.tscn")
-const WIND_PROJECTILE = preload("res://wind_projectile.tscn")
-const FIRE_PROJECTILE = preload("res://fire_projectile.tscn")
 
 @onready var animated_sprite = $AnimatedSprite2D
+
+# Ability cooldown
+@export var ability_cooldown: float = 0.5
+var can_use_ability: bool = true
 
 func _ready():
 	_update_character_visuals()
@@ -50,8 +46,8 @@ func _input(event):
 	if event is InputEventKey and event.pressed:
 		if event.keycode == KEY_X:
 			_switch_character()
-		elif event.keycode == KEY_F:
-			_use_ability()
+		elif event.keycode == KEY_F and can_use_ability:
+			_cast_ability()
 
 func _switch_character():
 	# Cycle to next character
@@ -60,44 +56,68 @@ func _switch_character():
 	_update_character_visuals()
 	_update_animation()
 	
-	# Optional: Print character name for debugging
-	print("Switched to: ", current_character.name, " (", current_character.element, ")")
+	print("Switched to: ", current_character.name)
 
 func _update_character_visuals():
-	# Create sprite frames for the current character
-	if animated_sprite:
-		var sprite_frames = current_character.create_frames.call()
+	if not animated_sprite:
+		return
+	
+	# Load sprite frames for current character
+	var sprite_frames = current_character.create_frames.call()
+	if sprite_frames:
 		animated_sprite.sprite_frames = sprite_frames
-		# Set default animation
-		if sprite_frames.has_animation("idle"):
-			animated_sprite.play("idle")
 		_update_animation()
 
 func _update_animation():
 	if not animated_sprite:
 		return
 	
-	# Determine animation state based on movement
-	var new_state = "idle"
-	
+	# Determine which animation to play
 	if not is_on_floor():
-		new_state = "jump"
-	elif abs(velocity.x) > 10:
-		new_state = "run"
+		if animated_sprite.sprite_frames.has_animation("jump"):
+			animated_sprite.play("jump")
 	else:
-		new_state = "idle"
+		if abs(velocity.x) > 10:
+			if animated_sprite.sprite_frames.has_animation("run"):
+				animated_sprite.play("run")
+		else:
+			if animated_sprite.sprite_frames.has_animation("idle"):
+				animated_sprite.play("idle")
+
+func _cast_ability():
+	can_use_ability = false
+	var cooldown_timer = get_tree().create_timer(ability_cooldown)
+	cooldown_timer.timeout.connect(func(): can_use_ability = true)
 	
-	# Only change animation if state changed
-	if new_state != animation_state:
-		animation_state = new_state
-		if animated_sprite.sprite_frames and animated_sprite.sprite_frames.has_animation(animation_state):
-			animated_sprite.play(animation_state)
+	var projectile_scene: PackedScene
+	var facing_direction = Vector2.RIGHT if not animated_sprite.flip_h else Vector2.LEFT
+	
+	match current_character.element:
+		"Water":
+			projectile_scene = load("res://water_projectile.tscn")
+		"Wind":
+			projectile_scene = load("res://wind_projectile.tscn")
+		"Fire":
+			projectile_scene = load("res://fire_projectile.tscn")
+		_:
+			return
+	
+	if projectile_scene:
+		var projectile = projectile_scene.instantiate()
+		# Position projectile in front of player
+		var spawn_offset = Vector2(20, 0) if facing_direction.x > 0 else Vector2(-20, 0)
+		projectile.position = global_position + spawn_offset
+		projectile.direction = facing_direction
+		
+		# Set effect type based on character element
+		projectile.effect_type = current_character.element.to_lower()
+		
+		# Add to scene tree (parent is the level)
+		get_tree().current_scene.add_child(projectile)
+		
+		print("Used ", current_character.element, " ability!")
 
 func _physics_process(delta):
-	# Update ability cooldown timer
-	if ability_timer > 0:
-		ability_timer -= delta
-	
 	# Apply gravity when not on floor
 	if not is_on_floor():
 		velocity.y += GRAVITY * delta
@@ -125,38 +145,3 @@ func _physics_process(delta):
 	
 	# Move the character
 	move_and_slide()
-
-func _use_ability():
-	# Check cooldown
-	if ability_timer > 0:
-		return
-	
-	# Reset cooldown
-	ability_timer = ABILITY_COOLDOWN
-	
-	# Determine direction based on sprite flip
-	var facing_direction = Vector2.RIGHT
-	if animated_sprite and animated_sprite.flip_h:
-		facing_direction = Vector2.LEFT
-	
-	# Spawn appropriate projectile based on character
-	var projectile_scene = null
-	match current_character.element:
-		"Water":
-			projectile_scene = WATER_PROJECTILE
-		"Wind":
-			projectile_scene = WIND_PROJECTILE
-		"Fire":
-			projectile_scene = FIRE_PROJECTILE
-	
-	if projectile_scene:
-		var projectile = projectile_scene.instantiate()
-		# Position projectile in front of player
-		var spawn_offset = Vector2(20, 0) if facing_direction.x > 0 else Vector2(-20, 0)
-		projectile.position = global_position + spawn_offset
-		projectile.direction = facing_direction
-		
-		# Add to scene tree (parent is the level)
-		get_tree().current_scene.add_child(projectile)
-		
-		print("Used ", current_character.element, " ability!")

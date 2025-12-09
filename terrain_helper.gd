@@ -1,12 +1,14 @@
 extends Node
 
-# Helper functions for creating terrain and placing decorative elements
-
-# Tile size in the tileset (typically 16x16 or 32x32)
 const TILE_SIZE = 32
 
 static func create_terrain_texture() -> Texture2D:
-	return load("res://Assets/Terrain/Grassland/tilesetgrass.png")
+	var texture = load("res://Assets/Terrain/Grassland/tilesetgrass.png")
+	if not texture:
+		print("ERROR: Could not load tileset texture from res://Assets/Terrain/Grassland/tilesetgrass.png")
+	else:
+		print("Successfully loaded tileset texture")
+	return texture
 
 static func create_grass_texture() -> Texture2D:
 	return load("res://Assets/Terrain/Grassland/grass.png")
@@ -17,31 +19,46 @@ static func create_tree_texture() -> Texture2D:
 static func create_bush_texture() -> Texture2D:
 	return load("res://Assets/Terrain/Grassland/bush.png")
 
-# Extract a specific tile from the tileset grid
-# tile_x and tile_y are the grid coordinates (0,0 is top-left)
-static func get_tile_from_tileset(tileset_texture: Texture2D, tile_x: int, tile_y: int) -> Texture2D:
+# Get a specific tile from the tileset based on grid coordinates
+static func get_tile_from_tileset(tileset_texture: Texture2D, tile_x: int, tile_y: int) -> ImageTexture:
 	if not tileset_texture:
+		print("get_tile_from_tileset: No tileset texture provided")
 		return null
 	
 	var image = tileset_texture.get_image()
 	if not image:
+		print("get_tile_from_tileset: Could not get image from texture")
 		return null
 	
-	# Calculate pixel coordinates
-	var pixel_x = tile_x * TILE_SIZE
-	var pixel_y = tile_y * TILE_SIZE
+	var tileset_width = image.get_width()
+	var tileset_height = image.get_height()
 	
-	# Check bounds
-	if pixel_x + TILE_SIZE > image.get_width() or pixel_y + TILE_SIZE > image.get_height():
-		# Return full texture as fallback
-		return tileset_texture
+	print("Tileset dimensions: ", tileset_width, "x", tileset_height, " (tiles: ", tileset_width/TILE_SIZE, "x", tileset_height/TILE_SIZE, ")")
 	
-	# Extract the tile region
-	var tile_image = image.get_region(Rect2i(pixel_x, pixel_y, TILE_SIZE, TILE_SIZE))
+	# Calculate tile position
+	var x = tile_x * TILE_SIZE
+	var y = tile_y * TILE_SIZE
+	
+	# Bounds check
+	if x + TILE_SIZE > tileset_width or y + TILE_SIZE > tileset_height:
+		print("get_tile_from_tileset: Tile position out of bounds: tile_x=", tile_x, " tile_y=", tile_y, " calculated x=", x, " y=", y)
+		return null
+	
+	# Extract the tile
+	var tile_image = image.get_region(Rect2i(x, y, TILE_SIZE, TILE_SIZE))
+	if not tile_image:
+		print("get_tile_from_tileset: Could not extract region")
+		return null
+	
 	var tile_texture = ImageTexture.create_from_image(tile_image)
+	if not tile_texture:
+		print("get_tile_from_tileset: Could not create texture from image")
+		return null
+	
+	print("Successfully extracted tile at (", tile_x, ",", tile_y, ")")
 	return tile_texture
 
-# Get tileset dimensions (how many tiles wide and tall)
+# Get tileset dimensions in tiles
 static func get_tileset_dimensions(tileset_texture: Texture2D) -> Vector2i:
 	if not tileset_texture:
 		return Vector2i(0, 0)
@@ -50,197 +67,213 @@ static func get_tileset_dimensions(tileset_texture: Texture2D) -> Vector2i:
 	if not image:
 		return Vector2i(0, 0)
 	
-	var tiles_x = image.get_width() / TILE_SIZE
-	var tiles_y = image.get_height() / TILE_SIZE
-	return Vector2i(tiles_x, tiles_y)
+	return Vector2i(image.get_width() / TILE_SIZE, image.get_height() / TILE_SIZE)
 
-# Get a ground tile based on position (left, middle, right)
-# Common tileset layout: first row usually has ground tiles
-static func get_ground_tile(tileset_texture: Texture2D, position: String = "middle") -> Texture2D:
-	if not tileset_texture:
-		return tileset_texture
-	
-	var dims = get_tileset_dimensions(tileset_texture)
-	if dims.x == 0 or dims.y == 0:
-		return tileset_texture
-	
-	# Try to find appropriate tiles
-	# Position: "left", "middle", "right"
+# Get a ground tile (left, middle, or right)
+static func get_ground_tile(tileset_texture: Texture2D, position: String = "middle") -> ImageTexture:
+	# First row (y=0) typically has ground tiles
+	# Try different tile positions - some tilesets have different layouts
 	var tile_x = 0
-	var tile_y = 0  # First row is usually ground tiles
+	var tile_y = 0
 	
 	match position:
 		"left":
-			tile_x = 0  # Left edge tile
-		"right":
-			tile_x = min(2, dims.x - 1)  # Right edge tile
+			tile_x = 0
+			tile_y = 0
 		"middle":
-			tile_x = min(1, dims.x - 1)  # Middle tile
+			tile_x = 1
+			tile_y = 0
+		"right":
+			tile_x = 2
+			tile_y = 0
 		_:
-			tile_x = min(1, dims.x - 1)  # Default to middle
+			tile_x = 1
+			tile_y = 0
 	
-	return get_tile_from_tileset(tileset_texture, tile_x, tile_y)
+	var tile = get_tile_from_tileset(tileset_texture, tile_x, tile_y)
+	if not tile:
+		# Fallback: try row 1 if row 0 doesn't work
+		tile = get_tile_from_tileset(tileset_texture, tile_x, 1)
+	
+	return tile
 
-# Create a tiled ground sprite using individual tiles from tileset
-static func create_ground_sprite(parent: Node2D, start_x: float, end_x: float, y: float, height: float = 32.0) -> Node2D:
+# Create ground sprite using individual tiles
+static func create_ground_sprite(parent: Node2D, start_x: float, end_x: float, y: float, height: float = 32.0):
+	print("create_ground_sprite called: parent=", parent.name, " start_x=", start_x, " end_x=", end_x, " y=", y)
+	
+	var tileset_texture = create_terrain_texture()
+	if not tileset_texture:
+		print("TerrainHelper: Could not load tileset texture")
+		return
+	
+	# Check if container already exists and remove it
+	var existing_container = parent.get_node_or_null("GroundTiles")
+	if existing_container:
+		existing_container.queue_free()
+	
 	var ground_container = Node2D.new()
-	ground_container.name = "GroundVisual"
+	ground_container.name = "GroundTiles"
+	ground_container.visible = true
+	ground_container.z_index = 0
 	parent.add_child(ground_container)
 	
-	var tileset = create_terrain_texture()
-	if not tileset:
-		return ground_container
+	# Position container relative to parent
+	ground_container.position = Vector2.ZERO
 	
-	var tile_size = float(TILE_SIZE)
-	var tile_width = end_x - start_x
-	var num_tiles = int(ceil(tile_width / tile_size))
+	# Make sure parent is also visible
+	if parent.has_method("set_visible"):
+		parent.visible = true
 	
-	var rng = RandomNumberGenerator.new()
-	rng.randomize()
+	var current_x = start_x
+	var tile_count = 0
+	var successful_tiles = 0
 	
-	# Create tiled sprites using individual tiles from tileset
-	for i in range(num_tiles):
-		var sprite = Sprite2D.new()
+	while current_x < end_x:
+		var tile_texture: ImageTexture
 		
-		# Use different tiles for variety (left edge, middle, right edge)
-		var tile_position = "middle"
-		if i == 0:
-			tile_position = "left"  # Left edge tile
-		elif i == num_tiles - 1:
-			tile_position = "right"  # Right edge tile
+		# Determine which tile to use (left, middle, right)
+		if tile_count == 0:
+			tile_texture = get_ground_tile(tileset_texture, "left")
+		elif current_x + TILE_SIZE >= end_x:
+			tile_texture = get_ground_tile(tileset_texture, "right")
 		else:
-			tile_position = "middle"  # Middle tile
+			tile_texture = get_ground_tile(tileset_texture, "middle")
 		
-		# Get the specific tile from tileset
-		var tile_texture = get_ground_tile(tileset, tile_position)
 		if tile_texture:
+			var sprite = Sprite2D.new()
 			sprite.texture = tile_texture
+			sprite.visible = true
+			# Position relative to parent (Ground node)
+			var relative_x = current_x - parent.position.x
+			var relative_y = y - parent.position.y
+			sprite.position = Vector2(relative_x + TILE_SIZE / 2.0, relative_y - TILE_SIZE / 2.0)
+			ground_container.add_child(sprite)
+			successful_tiles += 1
 		else:
-			# Fallback to full tileset if extraction fails
-			sprite.texture = tileset
+			print("TerrainHelper: Could not get tile texture at x=", current_x, " tile_count=", tile_count)
 		
-		# Position relative to parent (which is at ground center)
-		var world_x = start_x + i * tile_size + tile_size / 2
-		sprite.position = Vector2(world_x - parent.position.x, y - parent.position.y)
-		ground_container.add_child(sprite)
+		current_x += TILE_SIZE
+		tile_count += 1
 	
-	return ground_container
+	print("TerrainHelper: Created ", successful_tiles, "/", tile_count, " ground tiles from ", start_x, " to ", end_x)
 
-# Create a platform sprite with terrain texture using individual tiles
-static func create_platform_sprite(parent: Node2D, x: float, y: float, width: float) -> Node2D:
+# Create platform sprite using individual tiles
+static func create_platform_sprite(parent: Node2D, x: float, y: float, width: float):
+	var tileset_texture = create_terrain_texture()
+	if not tileset_texture:
+		print("TerrainHelper: Could not load tileset texture for platform")
+		return
+	
+	# Check if container already exists and remove it
+	var existing_container = parent.get_node_or_null("PlatformTiles")
+	if existing_container:
+		existing_container.queue_free()
+	
 	var platform_container = Node2D.new()
-	platform_container.name = "PlatformVisual"
+	platform_container.name = "PlatformTiles"
+	platform_container.visible = true
+	platform_container.z_index = 0
 	parent.add_child(platform_container)
 	
-	var tileset = create_terrain_texture()
-	if not tileset:
-		return platform_container
+	# Position container relative to parent
+	platform_container.position = Vector2.ZERO
 	
-	var tile_size = float(TILE_SIZE)
-	var num_tiles = int(ceil(width / tile_size))
+	# Make sure parent is also visible
+	if parent.has_method("set_visible"):
+		parent.visible = true
 	
-	# Create tiled sprites for platform using individual tiles
-	for i in range(num_tiles):
-		var sprite = Sprite2D.new()
+	var current_x = x
+	var tile_count = 0
+	var end_x = x + width
+	
+	while current_x < end_x:
+		var tile_texture: ImageTexture
 		
-		# Use different tiles for platform edges and middle
-		var tile_position = "middle"
-		if i == 0:
-			tile_position = "left"  # Left edge
-		elif i == num_tiles - 1:
-			tile_position = "right"  # Right edge
+		# Determine which tile to use (left, middle, right)
+		if tile_count == 0:
+			tile_texture = get_ground_tile(tileset_texture, "left")
+		elif current_x + TILE_SIZE >= end_x:
+			tile_texture = get_ground_tile(tileset_texture, "right")
 		else:
-			tile_position = "middle"  # Middle
+			tile_texture = get_ground_tile(tileset_texture, "middle")
 		
-		# Get the specific tile from tileset
-		var tile_texture = get_ground_tile(tileset, tile_position)
 		if tile_texture:
+			var sprite = Sprite2D.new()
 			sprite.texture = tile_texture
+			sprite.visible = true
+			# Position relative to parent (Platform node)
+			var relative_x = current_x - parent.position.x
+			var relative_y = y - parent.position.y
+			sprite.position = Vector2(relative_x + TILE_SIZE / 2.0, relative_y - TILE_SIZE / 2.0)
+			platform_container.add_child(sprite)
 		else:
-			# Fallback to full tileset if extraction fails
-			sprite.texture = tileset
+			print("TerrainHelper: Could not get tile texture for platform at x=", current_x, " position=", tile_count)
 		
-		# Position relative to parent (which is at platform center)
-		var world_x = x + i * tile_size + tile_size / 2
-		sprite.position = Vector2(world_x - parent.position.x, y - parent.position.y)
-		platform_container.add_child(sprite)
-	
-	return platform_container
+		current_x += TILE_SIZE
+		tile_count += 1
 
-# Randomly place trees in the level with collision
-static func place_random_trees(parent: Node2D, start_x: float, end_x: float, ground_y: float, min_spacing: float = 200.0, max_spacing: float = 400.0, player_spawn_x: float = 0.0):
+# Place random trees
+static func place_random_trees(parent: Node2D, start_x: float, end_x: float, ground_y: float, min_spacing: float = 300.0, max_spacing: float = 600.0, player_spawn_x: float = -1.0):
 	var tree_texture = create_tree_texture()
 	if not tree_texture:
 		return
 	
-	var trees_container = Node2D.new()
-	trees_container.name = "Trees"
-	parent.add_child(trees_container)
+	var current_x = start_x
+	var tree_count = 0
 	
-	var current_x = start_x + 100.0  # Start a bit in from the edge
-	var rng = RandomNumberGenerator.new()
-	rng.randomize()
-	
-	# Define safe zone around player spawn (no trees within this range)
-	var spawn_safe_zone = 200.0  # 200 pixels on each side of spawn
-	
-	while current_x < end_x - 100.0:
-		# Skip if too close to player spawn position
-		var distance_from_spawn = abs(current_x - player_spawn_x)
-		if distance_from_spawn < spawn_safe_zone:
-			# Skip this position and move past the safe zone
-			current_x = player_spawn_x + spawn_safe_zone
-			continue
+	while current_x < end_x:
+		# Check if we're in the player spawn safe zone
+		if player_spawn_x >= 0:
+			var distance_from_spawn = abs(current_x - player_spawn_x)
+			if distance_from_spawn < 200.0:  # 200 pixel safe zone
+				current_x += max_spacing
+				continue
 		
-		# Reduced chance to place a tree (30% chance instead of 70%)
-		if rng.randf() < 0.3:
-			# Create a StaticBody2D for the tree with collision
-			var tree_body = StaticBody2D.new()
-			tree_body.position = Vector2(current_x, ground_y - tree_texture.get_height() / 2)
+		# Random chance to spawn tree (30% chance)
+		if randf() < 0.3:
+			var tree = StaticBody2D.new()
+			tree.name = "Tree_" + str(tree_count)
+			# Position tree on top of ground
+			# ground_y is the center Y of the ground, so position tree base at ground_y - 16 (half of 32px ground height)
+			var sprite_size = tree_texture.get_size()
+			tree.position = Vector2(current_x, ground_y - 16)  # 16 is half of ground height (32/2)
+			parent.add_child(tree)
 			
-			# Add sprite
-			var tree_sprite = Sprite2D.new()
-			tree_sprite.texture = tree_texture
-			tree_body.add_child(tree_sprite)
+			# Add sprite - position it so the bottom aligns with the ground
+			var sprite = Sprite2D.new()
+			sprite.texture = tree_texture
+			# Sprite's origin is at center, so offset it up by half its height to align bottom with ground
+			sprite.position = Vector2(0, sprite_size.y / 2.0)
+			tree.add_child(sprite)
 			
-			# Add collision shape
-			var collision_shape = CollisionShape2D.new()
-			var rectangle_shape = RectangleShape2D.new()
-			# Use tree texture dimensions for collision, or a reasonable size
-			var tree_width = tree_texture.get_width()
-			var tree_height = tree_texture.get_height()
-			rectangle_shape.size = Vector2(tree_width * 0.8, tree_height * 0.8)  # Slightly smaller than sprite for better feel
-			collision_shape.shape = rectangle_shape
-			collision_shape.position = Vector2(0, -tree_height * 0.1)  # Adjust position slightly
-			tree_body.add_child(collision_shape)
+			# Add collision (80% of sprite size)
+			var collision = CollisionShape2D.new()
+			var shape = RectangleShape2D.new()
+			shape.size = sprite_size * 0.8
+			collision.shape = shape
+			# Position collision at bottom of tree sprite
+			collision.position = Vector2(0, sprite_size.y * 0.4)
+			tree.add_child(collision)
 			
-			trees_container.add_child(tree_body)
+			tree_count += 1
 		
-		# Move to next position with random spacing (increased spacing for fewer trees)
-		current_x += rng.randf_range(min_spacing * 1.5, max_spacing * 1.5)
+		# Move to next potential spawn location
+		current_x += randf_range(min_spacing, max_spacing)
 
-# Place bushes randomly
-static func place_random_bushes(parent: Node2D, start_x: float, end_x: float, ground_y: float, min_spacing: float = 150.0, max_spacing: float = 300.0):
+# Place random bushes
+static func place_random_bushes(parent: Node2D, start_x: float, end_x: float, ground_y: float, min_spacing: float = 100.0, max_spacing: float = 250.0):
 	var bush_texture = create_bush_texture()
 	if not bush_texture:
 		return
 	
-	var bushes_container = Node2D.new()
-	bushes_container.name = "Bushes"
-	parent.add_child(bushes_container)
+	var current_x = start_x
 	
-	var current_x = start_x + 50.0
-	var rng = RandomNumberGenerator.new()
-	rng.randomize()
-	
-	while current_x < end_x - 50.0:
-		# Random chance to place a bush (50% chance)
-		if rng.randf() < 0.5:
+	while current_x < end_x:
+		if randf() < 0.4:  # 40% chance
 			var bush = Sprite2D.new()
 			bush.texture = bush_texture
-			bush.position = Vector2(current_x, ground_y - bush_texture.get_height() / 2)
-			bushes_container.add_child(bush)
+			bush.position = Vector2(current_x, ground_y - bush_texture.get_size().y / 2.0)
+			parent.add_child(bush)
 		
-		# Move to next position with random spacing
-		current_x += rng.randf_range(min_spacing, max_spacing)
+		current_x += randf_range(min_spacing, max_spacing)
 

@@ -1,6 +1,7 @@
 [gd_scene load_steps=8 format=3 uid="uid://d9e0x1k2m3n4p5"]
 
 [ext_resource type="PackedScene" uid="uid://bq8x7k3m2n4p5" path="res://player.tscn" id="1_1"]
+[ext_resource type="PackedScene" uid="uid://goal_door1" path="res://goal_door.tscn" id="1_5"]
 [ext_resource type="Script" path="res://camera_follow.gd" id="1_2"]
 [ext_resource type="Script" path="res://win_area.gd" id="1_3"]
 [ext_resource type="Script" path="res://level1.gd" id="1_4"]
@@ -172,6 +173,9 @@ offset_top = -16.0
 offset_right = 100.0
 offset_bottom = 16.0
 color = Color(0.8, 0.8, 0.2, 1)
+
+[node name="GoalDoor" parent="FinalPlatform" instance=ExtResource("1_5")]
+position = Vector2(0, -45)
 
 [node name="Player" parent="." instance=ExtResource("1_1")]
 position = Vector2(100, 550)
