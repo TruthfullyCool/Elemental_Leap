@@ -2,6 +2,8 @@ extends Node
 
 const TILE_SIZE = 32
 
+# TerrainHelper autoload singleton for terrain generation
+
 static func create_terrain_texture() -> Texture2D:
 	var texture = load("res://Assets/Terrain/Grassland/tilesetgrass.png")
 	if not texture:
@@ -235,15 +237,17 @@ static func place_random_trees(parent: Node2D, start_x: float, end_x: float, gro
 			tree.name = "Tree_" + str(tree_count)
 			# Position tree on top of ground
 			# ground_y is the center Y of the ground, so position tree base at ground_y - 16 (half of 32px ground height)
+			# Move it higher so it sits better on the ground
 			var sprite_size = tree_texture.get_size()
-			tree.position = Vector2(current_x, ground_y - 16)  # 16 is half of ground height (32/2)
+			tree.position = Vector2(current_x, ground_y - 32)  # Move higher so tree sits on top of ground
 			parent.add_child(tree)
 			
 			# Add sprite - position it so the bottom aligns with the ground
 			var sprite = Sprite2D.new()
 			sprite.texture = tree_texture
 			# Sprite's origin is at center, so offset it up by half its height to align bottom with ground
-			sprite.position = Vector2(0, sprite_size.y / 2.0)
+			# Adjust offset to account for higher tree position
+			sprite.position = Vector2(0, sprite_size.y / 2.0 - 16)  # Move sprite up to match higher tree position
 			tree.add_child(sprite)
 			
 			# Add collision (80% of sprite size)
@@ -252,7 +256,8 @@ static func place_random_trees(parent: Node2D, start_x: float, end_x: float, gro
 			shape.size = sprite_size * 0.8
 			collision.shape = shape
 			# Position collision at bottom of tree sprite
-			collision.position = Vector2(0, sprite_size.y * 0.4)
+			# Adjust collision position to match higher tree position
+			collision.position = Vector2(0, sprite_size.y * 0.4 - 16)
 			tree.add_child(collision)
 			
 			tree_count += 1
@@ -276,4 +281,53 @@ static func place_random_bushes(parent: Node2D, start_x: float, end_x: float, gr
 			parent.add_child(bush)
 		
 		current_x += randf_range(min_spacing, max_spacing)
+
+# Place random decorations
+static func place_random_decorations(parent: Node2D, start_x: float, end_x: float, ground_y: float, player_spawn_x: float = -1.0, min_spacing: float = 200.0, max_spacing: float = 400.0):
+	# List of all decoration assets
+	var decoration_paths = [
+		"res://Assets/Background/decorations/sign.png",
+		"res://Assets/Background/decorations/shop.png",
+		"res://Assets/Background/decorations/rock_1.png",
+		"res://Assets/Background/decorations/rock_2.png",
+		"res://Assets/Background/decorations/rock_3.png",
+		"res://Assets/Background/decorations/fence_1.png",
+		"res://Assets/Background/decorations/fence_2.png",
+		"res://Assets/Background/decorations/grass_1.png",
+		"res://Assets/Background/decorations/grass_2.png",
+		"res://Assets/Background/decorations/grass_3.png",
+		"res://Assets/Background/decorations/lamp.png"
+	]
+	
+	var current_x = start_x
+	var decoration_count = 0
+	
+	while current_x < end_x:
+		# Check if we're in the player spawn safe zone
+		if player_spawn_x >= 0:
+			var distance_from_spawn = abs(current_x - player_spawn_x)
+			if distance_from_spawn < 200.0:  # 200 pixel safe zone
+				current_x += max_spacing
+				continue
+		
+		# Random chance to spawn decoration (25% chance)
+		if randf() < 0.25:
+			# Pick a random decoration
+			var decoration_path = decoration_paths[randi() % decoration_paths.size()]
+			var decoration_texture = load(decoration_path)
+			
+			if decoration_texture:
+				var decoration = Sprite2D.new()
+				decoration.texture = decoration_texture
+				var texture_size = decoration_texture.get_size()
+				# Position decoration on top of ground
+				decoration.position = Vector2(current_x, ground_y - texture_size.y / 2.0)
+				decoration.name = "Decoration_" + str(decoration_count)
+				parent.add_child(decoration)
+				decoration_count += 1
+		
+		# Move to next potential spawn location
+		current_x += randf_range(min_spacing, max_spacing)
+	
+	print("Placed ", decoration_count, " decorations")
 

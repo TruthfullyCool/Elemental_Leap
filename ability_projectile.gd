@@ -48,7 +48,27 @@ func _setup_effect_sprite():
 
 func _physics_process(delta):
 	# Move the projectile
+	var old_position = position
 	position += velocity * delta
+	
+	# Check for collisions with destructible objects (wind only)
+	if effect_type == "wind":
+		# Use space_state to check for collisions at current position
+		var space_state = get_world_2d().direct_space_state
+		var query = PhysicsPointQueryParameters2D.new()
+		query.position = position
+		query.collision_mask = 1  # Check layer 1
+		var results = space_state.intersect_point(query, 1)
+		
+		for result in results:
+			var collider = result.collider
+			# Check if it's a destructible object
+			if collider and collider.is_in_group("destructible"):
+				if collider.has_method("apply_wind_force"):
+					var push_force = direction * speed * 0.02  # Convert velocity to force
+					collider.apply_wind_force(push_force)
+					print("Wind projectile pushing destructible object!")
+					# Don't destroy projectile, let it continue
 	
 	# Check if out of bounds (optional - can remove if you want them to travel forever)
 	if position.x < -1000 or position.x > 10000:

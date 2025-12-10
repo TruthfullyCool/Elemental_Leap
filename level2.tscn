@@ -4,7 +4,7 @@
 [ext_resource type="PackedScene" uid="uid://goal_door1" path="res://goal_door.tscn" id="1_5"]
 [ext_resource type="Script" path="res://camera_follow.gd" id="1_2"]
 [ext_resource type="Script" path="res://win_area.gd" id="1_3"]
-[ext_resource type="Script" path="res://level1.gd" id="1_4"]
+[ext_resource type="Script" path="res://level2.gd" id="1_4"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_ground"]
 size = Vector2(4000, 32)
@@ -16,6 +16,7 @@ size = Vector2(200, 32)
 size = Vector2(200, 50)
 
 [node name="Main" type="Node2D"]
+script = ExtResource("1_4")
 script = ExtResource("1_4")
 
 [node name="Ground" type="StaticBody2D" parent="."]

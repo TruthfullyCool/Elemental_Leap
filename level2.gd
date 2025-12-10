@@ -7,18 +7,21 @@ func _ready():
 	# Connect win signal - check if it's a GoalDoor or WinArea
 	var goal_door = get_node_or_null("FinalPlatform/GoalDoor")
 	if goal_door:
-		print("Level1: Connected to GoalDoor")
+		print("Level2: Connected to GoalDoor")
 		goal_door.player_won.connect(_on_player_won)
+		# Lock the door initially (will unlock when key is collected)
+		goal_door.has_key = false
+		print("Level2: Door is LOCKED - need key to unlock")
 	
 	# WinArea is disabled - door is the only way to complete level
 	if win_area:
 		# Disconnect WinArea signal completely
-		if win_area.player_won.is_connected(_on_player_won):
+		if win_area.has_signal("player_won") and win_area.player_won.is_connected(_on_player_won):
 			win_area.player_won.disconnect(_on_player_won)
-		print("Level1: WinArea is disabled and disconnected - door is the only way to complete level")
+		print("Level2: WinArea is disabled and disconnected - door is the only way to complete level")
 	
 	if not goal_door and not win_area:
-		print("Level1: WARNING - No win condition found!")
+		print("Level2: WARNING - No win condition found!")
 	
 	# Hide win label initially
 	if win_label:
@@ -27,7 +30,7 @@ func _ready():
 	# Setup terrain and decorations
 	_setup_terrain()
 	_place_trees()
-	_place_flammable_with_key()
+	_place_destructible_with_key()
 
 func _setup_terrain():
 	# Get player spawn position for safe zone
@@ -92,9 +95,7 @@ func _setup_terrain():
 		var color_rect = final_platform.get_node_or_null("ColorRect")
 		if color_rect:
 			color_rect.visible = true
-			print("FinalPlatform ColorRect is visible at position: ", color_rect.position)
-		else:
-			print("WARNING: FinalPlatform has no ColorRect!")
+			print("FinalPlatform ColorRect is visible")
 		
 		# Check for GoalDoor
 		var goal_door = final_platform.get_node_or_null("GoalDoor")
@@ -119,7 +120,7 @@ func _setup_terrain():
 		
 		# Ensure platform is visible
 		final_platform.visible = true
-		print("FinalPlatform visibility: ", final_platform.visible, " global position: ", final_platform.global_position)
+		print("FinalPlatform visibility: ", final_platform.visible)
 
 func _place_trees():
 	# Get ground bounds
@@ -154,67 +155,53 @@ func _place_trees():
 	# Place decorations
 	TerrainHelper.place_random_decorations(self, start_x, end_x, ground_y, player_spawn_x, 200.0, 400.0)
 
-func _place_flammable_with_key():
-	# Get ground bounds
-	var ground = get_node_or_null("Ground")
-	if not ground:
+func _place_destructible_with_key():
+	# Find a platform to place the destructible object on
+	# Let's use Platform3 or Platform4 (around middle of level)
+	var platform = get_node_or_null("Platform3")
+	if not platform:
+		platform = get_node_or_null("Platform4")
+	if not platform:
+		platform = get_node_or_null("Platform2")
+	if not platform:
+		print("ERROR: Could not find a platform for destructible object!")
 		return
 	
-	var ground_collision = ground.get_node_or_null("CollisionShape2D")
-	if not ground_collision:
+	var platform_collision = platform.get_node_or_null("CollisionShape2D")
+	if not platform_collision:
+		print("ERROR: Platform has no collision shape!")
 		return
 	
-	var shape = ground_collision.shape
-	if not shape:
+	var platform_shape = platform_collision.shape
+	if not platform_shape:
+		print("ERROR: Platform collision has no shape!")
 		return
 	
-	# Get player spawn position for safe zone
-	var player = get_node_or_null("Player")
-	var player_spawn_x = -1.0
-	if player:
-		player_spawn_x = player.position.x
+	# Position destructible object on the platform
+	var platform_x = platform.position.x
+	var platform_y = platform.position.y
+	var platform_width = platform_shape.size.x
 	
-	var start_x = ground.position.x - shape.size.x / 2.0
-	var end_x = ground.position.x + shape.size.x / 2.0
-	var ground_y = ground.position.y
+	# Place it on the left side of the platform
+	var destructible_x = platform_x - platform_width / 2.0 + 50
+	var destructible_y = platform_y - 48  # Position above platform
 	
-	# Find a random position for the flammable object (avoiding player spawn)
-	var attempts = 0
-	var flammable_x = 0.0
-	
-	while attempts < 50:
-		flammable_x = randf_range(start_x + 500, end_x - 500)  # Keep away from edges
-		
-		# Check if it's too close to player spawn
-		if player_spawn_x >= 0:
-			var distance_from_spawn = abs(flammable_x - player_spawn_x)
-			if distance_from_spawn < 300.0:  # 300 pixel safe zone
-				attempts += 1
-				continue
-		
-		# Check if it's too close to final platform
-		var final_platform = get_node_or_null("FinalPlatform")
-		if final_platform:
-			var distance_from_platform = abs(flammable_x - final_platform.position.x)
-			if distance_from_platform < 200.0:  # Keep away from final platform
-				attempts += 1
-				continue
-		
-		break
-	
-	# Load flammable object scene
-	var flammable_scene = load("res://flammable_object.tscn")
-	if not flammable_scene:
-		print("ERROR: Could not load flammable_object.tscn")
+	# Load destructible object scene
+	var destructible_scene = load("res://destructible_object.tscn")
+	if not destructible_scene:
+		print("ERROR: Could not load destructible_object.tscn")
 		return
 	
-	# Create flammable object
-	var flammable = flammable_scene.instantiate()
-	# ground_y is the center Y of the ground, so position it higher to sit on top
-	flammable.position = Vector2(flammable_x, ground_y - 48)  # Move higher to sit on top of ground
-	flammable.name = "FlammableObject"
-	add_child(flammable)
-	print("Placed flammable object at: ", flammable.position)
+	# Create destructible object
+	var destructible = destructible_scene.instantiate()
+	destructible.position = Vector2(destructible_x, destructible_y)
+	destructible.name = "DestructibleObject"
+	add_child(destructible)
+	
+	# Set fall detection - breaks if it falls below the platform
+	var fall_y = platform_y + 50  # Breaks if it falls 50 pixels below platform
+	destructible.set_fall_detection_y(fall_y)
+	print("Placed destructible object on platform at: ", destructible.position, " fall_y: ", fall_y)
 	
 	# Load key scene
 	var key_scene = load("res://key.tscn")
@@ -222,34 +209,37 @@ func _place_flammable_with_key():
 		print("ERROR: Could not load key.tscn")
 		return
 	
-	# Create key (hidden, positioned at flammable object location)
+	# Create key (hidden, will appear when destructible breaks)
 	var key = key_scene.instantiate()
-	key.position = Vector2(flammable_x, ground_y - 80)  # Position above flammable object
+	key.position = Vector2(destructible_x, destructible_y)  # Same position as destructible
 	key.name = "Key"
 	key.add_to_group("key")
 	add_child(key)
 	print("Placed key (hidden) at: ", key.position)
 	
-	# Connect key to flammable object
-	if flammable.has_method("set_key_reference"):
-		flammable.set_key_reference(key)
-	else:
-		# Set the key reference directly
-		flammable.key_reference = key
+	# Connect key to destructible object
+	destructible.set_key_reference(key)
 	
-	print("Key is hidden behind flammable object. Destroy it with fire ability to reveal the key!")
+	# Connect key to goal door
+	var goal_door = get_node_or_null("FinalPlatform/GoalDoor")
+	if goal_door:
+		if key.has_signal("key_collected"):
+			key.key_collected.connect(goal_door._on_key_collected)
+			print("Level2: Connected key to goal door")
+	
+	print("Destructible object placed on platform. Push it with WIND ability to make it fall and break!")
 
 func _on_player_won():
-	print("Level1: _on_player_won called!")
+	print("Level2: _on_player_won called!")
 	
 	# Disable player movement
 	var player = get_node_or_null("Player")
 	if player:
 		player.set_physics_process(false)
-		print("Level1: Disabled player physics")
+		print("Level2: Disabled player physics")
 	
 	# Check if this is the final level
-	print("Level1: Current level = ", LevelManager.current_level, ", Total levels = ", LevelManager.total_levels)
+	print("Level2: Current level = ", LevelManager.current_level, ", Total levels = ", LevelManager.total_levels)
 	if LevelManager.current_level >= LevelManager.total_levels:
 		# Final level completed!
 		if win_label:
@@ -272,12 +262,14 @@ func _on_player_won():
 				win_label.add_theme_font_size_override("font_size", 48)
 		
 		# Load next level after a short delay
-		print("Level1: Loading next level in 1.5 seconds...")
+		print("Level2: Loading next level in 1.5 seconds...")
 		await get_tree().create_timer(1.5).timeout
-		print("Level1: Calling LevelManager.load_next_level()")
+		print("Level2: Calling LevelManager.load_next_level()")
 		LevelManager.load_next_level()
 
 func _input(event):
-	if event.is_action_pressed("ui_select") or (event is InputEventKey and event.keycode == KEY_R):
-		if win_label and win_label.visible:
-			LevelManager.load_level(1)  # Restart from level 1
+	# Allow restarting from level 1 by pressing R when win label is visible
+	if event.is_action_pressed("ui_cancel") and win_label and win_label.visible:
+		LevelManager.current_level = 1
+		LevelManager.load_level(1)
+
